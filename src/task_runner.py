@@ -14,39 +14,22 @@ from src.constants import (
 )
 
 
-def execute_conversion_task(store, request_record, test_mode=False):
-    """Run or simulate WebM->GIF conversion and persist Answer record."""
-    answer_uid = store.next_answer_uid()
-    req_uid = request_record["uid"]
-    req_ts = request_record["timestamp"]
-    content = request_record["content"]
+def _build_answer_payload(answer_uid, req_uid, req_ts, output,
+                          status, exception, cache_hit):
+    """Assemble standardized Answer record dictionary."""
+    return {
+        "uid": answer_uid,
+        "timestamp": req_ts,
+        "output": output,
+        "status": status,
+        "exception": exception,
+        "request": req_uid,
+        "cache_hit": cache_hit,
+    }
 
-    if test_mode:
-        cached = store.find_cached_answer(content)
-        hit = ONE if cached is not None else ZERO
-        output = cached["output"] if hit else f"test-gif:{content}"
-        return store.create_answer({
-            "uid": answer_uid,
-            "timestamp": req_ts,
-            "output": output,
-            "status": TASK_STATUS_OK,
-            "exception": "",
-            "request": req_uid,
-            "cache_hit": hit,
-        })
 
-    cached = store.find_cached_answer(content)
-    if cached is not None:
-        return store.create_answer({
-            "uid": answer_uid,
-            "timestamp": req_ts,
-            "output": cached["output"],
-            "status": TASK_STATUS_OK,
-            "exception": "",
-            "request": req_uid,
-            "cache_hit": ONE,
-        })
-
+def _run_subprocess_converter(content):
+    """Invoke CLI WebM->GIF converter subprocess and decode outcome."""
     proc = subprocess.run(
         [sys.executable, "-m", "src.converter", content],
         capture_output=True,
@@ -54,20 +37,37 @@ def execute_conversion_task(store, request_record, test_mode=False):
         check=False,
     )
     if proc.returncode == ZERO:
-        encoded = base64.b64encode(proc.stdout).decode("ascii")
-        status = TASK_STATUS_OK
-        exception = ""
-    else:
-        encoded = ""
-        status = TASK_STATUS_ERROR
-        exception = proc.stderr.decode(ENCODING, errors="replace").strip()
+        return (
+            base64.b64encode(proc.stdout).decode("ascii"),
+            TASK_STATUS_OK,
+            "",
+        )
+    return (
+        "",
+        TASK_STATUS_ERROR,
+        proc.stderr.decode(ENCODING, errors="replace").strip(),
+    )
 
-    return store.create_answer({
-        "uid": answer_uid,
-        "timestamp": req_ts,
-        "output": encoded,
-        "status": status,
-        "exception": exception,
-        "request": req_uid,
-        "cache_hit": ZERO,
-    })
+
+def execute_conversion_task(store, request_record, test_mode=False):
+    """Run or simulate WebM->GIF conversion and persist Answer record."""
+    answer_uid = store.next_answer_uid()
+    req_uid = request_record["uid"]
+    req_ts = request_record["timestamp"]
+    content = request_record["content"]
+    cached = store.find_cached_answer(content)
+
+    if cached is not None:
+        return store.create_answer(_build_answer_payload(
+            answer_uid, req_uid, req_ts,
+            cached["output"], TASK_STATUS_OK, "", ONE,
+        ))
+    if test_mode:
+        return store.create_answer(_build_answer_payload(
+            answer_uid, req_uid, req_ts,
+            f"test-gif:{content}", TASK_STATUS_OK, "", ZERO,
+        ))
+    output, status, exc = _run_subprocess_converter(content)
+    return store.create_answer(_build_answer_payload(
+        answer_uid, req_uid, req_ts, output, status, exc, ZERO,
+    ))
