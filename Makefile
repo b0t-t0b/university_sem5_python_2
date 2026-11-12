@@ -1,4 +1,10 @@
+ifneq (,$(wildcard .venv/Scripts/python.exe))
 PYTHON := .venv/Scripts/python.exe
+else ifneq (,$(wildcard .venv/bin/python))
+PYTHON := .venv/bin/python
+else
+PYTHON := python
+endif
 
 .PHONY: all lint demo test clean
 
@@ -17,4 +23,4 @@ test:
 	$(PYTHON) -m coverage report -m
 
 clean:
-	rm -rf .coverage htmlcov .pytest_cache src/__pycache__ tests/__pycache__
+	$(PYTHON) -c "import shutil, os; [shutil.rmtree(p, ignore_errors=True) for p in ('.pytest_cache', 'htmlcov', 'src/__pycache__', 'tests/__pycache__')]; [os.remove(f) for f in ('.coverage',) if os.path.exists(f)]"

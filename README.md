@@ -25,7 +25,7 @@
    - В `tests/test_mbt.py` реализовано модельное тестирование (`RuleBasedStateMachine` из библиотеки Hypothesis) с сопоставлением HTTP API и эталонной модели `ReferenceModel`.
 3. **Этап 3 — SQLite + SQLAlchemy ORM (`src/sqlite_store.py`, `src/demo_stage3.py`)**:
    - Слой хранения данных заменён на реляционную БД SQLite с использованием ORM SQLAlchemy 2.x (`SessionModel`, `RequestModel`, `AnswerModel`) и каскадным удалением связанных ответов.
-   - Аналитический отчёт `GET /public/api/query/report` по формуле `(22)` реляционной алгебры ($\pi_{\text{content},\text{locale}}(\text{Request} \bowtie_{R.\text{session}=S.\text{uid}} \sigma_{\text{timestamp} \ge \text{now}-360}(\text{Session}))$) выполняется на уровне SQL ORM.
+   - Аналитический отчёт `GET /public/api/query/report` по формуле `(22)` реляционной алгебры ($\pi_{R.\text{content},S.\text{locale}}((\sigma_{S.\text{timestamp} \ge \text{now}-360}(S)) \mathbin{⟖}_{S.\text{uid}=R.\text{session}} R)$, правое внешнее соединение; для устаревших сессий возвращается `locale: null`) выполняется на уровне SQL ORM.
 
 ### Структура репозитория
 
