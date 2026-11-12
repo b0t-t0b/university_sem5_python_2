@@ -221,7 +221,7 @@ def parse_args(argv=None):
     parser.add_argument(
         "--db-mode",
         choices=(MODE_FILE, MODE_SQLITE),
-        default=MODE_FILE,
+        default=MODE_SQLITE,
     )
     parser.add_argument("--db-path", default=None)
     parser.add_argument("--test-mode", action="store_true")

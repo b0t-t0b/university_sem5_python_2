@@ -29,6 +29,7 @@ from src.constants import (
 from src.demo_stage1 import generate_sample_webm
 from src.file_store import FileDataStore
 from src.server import create_wsgi_server
+from src.sqlite_store import SQLiteDataStore
 from src.task_runner import execute_conversion_task
 
 _TMP_DIR = None
@@ -39,11 +40,11 @@ _BASE_URL = ""
 
 
 def setup_module():
-    """Start background Bottle HTTP API server in test mode for MBT."""
+    """Start background Bottle HTTP API server with SQLite for MBT."""
     global _TMP_DIR, _STORE, _SERVER, _THREAD, _BASE_URL
     _TMP_DIR = tempfile.TemporaryDirectory()
-    db_path = os.path.join(_TMP_DIR.name, "mbt_file_db.json")
-    _STORE = FileDataStore(db_path)
+    db_file = os.path.join(_TMP_DIR.name, "mbt_sqlite.db")
+    _STORE = SQLiteDataStore(f"sqlite:///{db_file}")
     _SERVER = create_wsgi_server(
         _STORE, host=DEFAULT_HOST, port=ZERO, test_mode=True
     )
@@ -54,10 +55,12 @@ def setup_module():
 
 
 def teardown_module():
-    """Shut down Bottle server and remove temporary storage directory."""
+    """Shut down Bottle server, dispose SQLite engine, clean temp dir."""
     if _SERVER is not None:
         _SERVER.shutdown()
         _SERVER.server_close()
+    if _STORE is not None:
+        _STORE.dispose()
     if _TMP_DIR is not None:
         _TMP_DIR.cleanup()
 
@@ -480,27 +483,36 @@ def test_http_api_model_based():
     )
 
 
-@given(should_succeed=st.booleans())
-@settings(max_examples=4, deadline=None)
-def test_real_subprocess_conversion_hypothesis(should_succeed):
-    """Verify real subprocess WebM->GIF task execution via Hypothesis."""
+@given(should_succeed=st.booleans(), use_sqlite=st.booleans())
+@settings(max_examples=8, deadline=None)
+def test_real_subprocess_conversion_hypothesis(should_succeed, use_sqlite):
+    """Verify real subprocess WebM->GIF task execution on both stores."""
     with tempfile.TemporaryDirectory() as tmp_dir:
-        store = FileDataStore(os.path.join(tmp_dir, "real_db.json"))
-        store.create_session(1, 1000, "en", "TestAgent")
-        if should_succeed:
-            webm_path = os.path.join(tmp_dir, "real.webm")
-            generate_sample_webm(webm_path, 32, 24, 2, 5, "bars")
-            req1 = store.create_request(1, 1001, webm_path, 1, 1)
-            ans1 = execute_conversion_task(store, req1, test_mode=False)
-            assert ans1["status"] == TASK_STATUS_OK
-            assert ans1["cache_hit"] == ZERO
-            req2 = store.create_request(2, 1002, webm_path, 1, 1)
-            ans2 = execute_conversion_task(store, req2, test_mode=False)
-            assert ans2["cache_hit"] == ONE
+        if use_sqlite:
+            db_file = os.path.join(tmp_dir, "real.db")
+            store = SQLiteDataStore(f"sqlite:///{db_file}")
         else:
-            req_bad = store.create_request(
-                3, 1003, os.path.join(tmp_dir, "missing.webm"), 1, 1
-            )
-            ans_bad = execute_conversion_task(store, req_bad, test_mode=False)
-            assert ans_bad["status"] == TASK_STATUS_ERROR
-            assert ans_bad["exception"] != ""
+            store = FileDataStore(os.path.join(tmp_dir, "real_db.json"))
+        try:
+            store.create_session(1, 1000, "en", "TestAgent")
+            if should_succeed:
+                webm_path = os.path.join(tmp_dir, "real.webm")
+                generate_sample_webm(webm_path, 32, 24, 2, 5, "bars")
+                req1 = store.create_request(1, 1001, webm_path, 1, 1)
+                ans1 = execute_conversion_task(store, req1, test_mode=False)
+                assert ans1["status"] == TASK_STATUS_OK
+                assert ans1["cache_hit"] == ZERO
+                req2 = store.create_request(2, 1002, webm_path, 1, 1)
+                ans2 = execute_conversion_task(store, req2, test_mode=False)
+                assert ans2["cache_hit"] == ONE
+            else:
+                bad_file = os.path.join(tmp_dir, "missing.webm")
+                req_bad = store.create_request(3, 1003, bad_file, 1, 1)
+                ans_bad = execute_conversion_task(
+                    store, req_bad, test_mode=False
+                )
+                assert ans_bad["status"] == TASK_STATUS_ERROR
+                assert ans_bad["exception"] != ""
+        finally:
+            if hasattr(store, "dispose"):
+                store.dispose()
