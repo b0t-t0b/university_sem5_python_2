@@ -289,7 +289,7 @@ class HTTPAPIStateMachine(RuleBasedStateMachine):
             assert expected_err
             return multiple()
 
-    @rule(uid=st.integers(min_value=1, max_value=6))
+    @rule(uid=st.one_of(sessions, st.integers(min_value=1, max_value=6)))
     def r_remove_session(self, uid):
         """Test 1.2 DELETE /public/api/remove/session/:uid."""
         expected_err = False
@@ -316,7 +316,7 @@ class HTTPAPIStateMachine(RuleBasedStateMachine):
         assert act == exp
 
     @rule(
-        uid=st.integers(min_value=1, max_value=6),
+        uid=st.one_of(sessions, st.integers(min_value=1, max_value=6)),
         ts=st.one_of(st.none(), _ts_strategy()),
         locale=st.one_of(st.none(), st.sampled_from(["ru", "en", "fr"])),
         ua=st.one_of(st.none(), st.sampled_from(["Safari", "Edge"])),
@@ -342,7 +342,7 @@ class HTTPAPIStateMachine(RuleBasedStateMachine):
         uid=st.integers(min_value=1, max_value=6),
         ts=_ts_strategy(),
         content=st.sampled_from(["clip1.webm", "clip2.webm"]),
-        session=st.integers(min_value=1, max_value=6),
+        session=st.one_of(sessions, st.integers(min_value=1, max_value=6)),
         triggered=st.integers(min_value=0, max_value=1),
     )
     def r_create_request(self, uid, ts, content, session, triggered):
@@ -368,7 +368,7 @@ class HTTPAPIStateMachine(RuleBasedStateMachine):
             assert expected_err
             return multiple()
 
-    @rule(uid=st.integers(min_value=1, max_value=6))
+    @rule(uid=st.one_of(requests, st.integers(min_value=1, max_value=6)))
     def r_remove_request(self, uid):
         """Test 2.2 DELETE /public/api/remove/request/:uid."""
         expected_err = False
@@ -384,7 +384,7 @@ class HTTPAPIStateMachine(RuleBasedStateMachine):
             assert expected_err
 
     @rule(
-        session=st.integers(min_value=1, max_value=6),
+        session=st.one_of(sessions, st.integers(min_value=1, max_value=6)),
         uid=st.one_of(st.none(), st.integers(min_value=1, max_value=6)),
         content=st.one_of(
             st.none(), st.sampled_from(["clip1.webm", "clip2.webm"])
@@ -398,12 +398,14 @@ class HTTPAPIStateMachine(RuleBasedStateMachine):
         assert act == exp
 
     @rule(
-        uid=st.integers(min_value=1, max_value=6),
+        uid=st.one_of(requests, st.integers(min_value=1, max_value=6)),
         ts=st.one_of(st.none(), _ts_strategy()),
         content=st.one_of(
             st.none(), st.sampled_from(["clip1.webm", "clip3.webm"])
         ),
-        session=st.one_of(st.none(), st.integers(min_value=1, max_value=6)),
+        session=st.one_of(
+            st.none(), sessions, st.integers(min_value=1, max_value=6)
+        ),
         triggered=st.one_of(st.none(), st.integers(min_value=0, max_value=1)),
     )
     def r_correct_request(self, uid, ts, content, session, triggered):
@@ -428,7 +430,7 @@ class HTTPAPIStateMachine(RuleBasedStateMachine):
             assert expected_err
 
     @rule(
-        req_uid=st.integers(min_value=1, max_value=6),
+        req_uid=st.one_of(requests, st.integers(min_value=1, max_value=6)),
         cache_hit=st.one_of(st.none(), st.integers(min_value=0, max_value=1)),
     )
     def r_query_answer(self, req_uid, cache_hit):
